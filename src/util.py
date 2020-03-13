@@ -25,56 +25,42 @@ def readExcel(fileName, titleRow, sheetName):
 		print(ex)
 		input()
 
-def sameDayOfnextWeek(today):
-	"""
-	Soon to be deprecated.
-	"""
-	today = datetime.datetime.strptime(today,"%d-%m-%Y")
-	next_Day = today + datetime.timedelta(days=-today.weekday()+1, weeks=1)
-	return next_Day.strftime("%d-%m-%Y")
-
 def startingDate():
 	"""
 	Input: None
 	Output: returns next Tuesday date; todays date if today is Tuesday.
 	"""
 	if date.today().weekday() == 1:
-		return date.today().strftime("%d/%m/%Y")
+		return date.today().strftime("%m/%d/%Y")
 	else:
-		return (date.today() + timedelta(days=date.today().weekday() + 1)).strftime("%d/%m/%Y")
+		return (date.today() + timedelta(days=date.today().weekday() + 1)).strftime("%m/%d/%Y")
 
 def nextWeeksDate(currentDate):
 	"""
 	Input: An initial date format %d/%m/%Y
 	Output: A date, 7 days after.
 	"""
-	return (datetime.strptime(currentDate,"%d/%m/%Y") + timedelta(days=7)).strftime("%d/%m/%Y")
-
-def listToTuplaWithElement(listOfElements,Date):
-	outputList = []
-	nextDate = sameDayOfnextWeek(Date)
-	for element in listOfElements:
-		outputList += [(element,nextDate)]
-	return outputList
+	return (datetime.strptime(currentDate,"%m/%d/%Y") + timedelta(days=7)).strftime("%m/%d/%Y")
 
 def getUsefulData(filename, row_number, sheetname):
 	df = readExcel(filename, row_number, sheetname)
 	df["QA_Date"] = ""
 
-	QAData = df[['url' ,'address.2','raw_apn','active.1','structure.1', 'rental.1', "QA_Date"]]
+	QAData = df[['url','address.2','raw_apn','active.1','residential.1','structure.1', 'rental.1', "comments"]]
 	QAData = QAData.rename(columns = {
 									  "address.2":"address",
 									  "raw_apn":"apn",
 									  "active.1": "active",
+									  "residential.1":"residential",
 									  "structure.1": "structure",
 									  "rental.1": "rental"
 									  })
-	return QAData, len(QAData)
+	return QAData
 
-def generateWeeklyQA(QAable, urls, addresses, apns, batch_size):
+def generateWeeklyQA(QAable, header_row, batch_size):
 	# First, we sample the whole QAable array in order to have randomness.
 	QAable = sample(QAable,len(QAable))
-	
+
 	# Now we make a new array with the dates. We initialize the date too.
 	date = startingDate()
 	dates = []
@@ -87,47 +73,20 @@ def generateWeeklyQA(QAable, urls, addresses, apns, batch_size):
 		dates.pop()
 
 	# Last thing is to make an array of arrays using this two bad boys.
-	sorted = sortTuples(list(zip(QAable, dates, urls,addresses,apns)),0)
-	return list(zip(QAable, dates, [elem[0] for elem in sorted],[elem[1] for elem in sorted],[elem[2] for elem in sorted],[elem[3] for elem in sorted],[elem[4] for elem in sorted]))
+	return list(zip(dates, [elem[0] + header_row + 1 for elem in QAable], [elem[1] for elem in QAable], [elem[2] for elem in QAable], [elem[3] for elem in QAable], [elem[4] for elem in QAable], [elem[5] for elem in QAable], [elem[6] for elem in QAable], [elem[7] for elem in QAable]))
 	 
 
 def findQAable(QAData):
+	""" findQAable( DataFrame data ) : list """
 	QAable = []
 	for index, row in QAData.iterrows():
 		# We don't want resorts, timeshares, RVs, rooms or inactives
-		if not(row.structure == "resort" or row.structure == "timeshare" or row.structure == "hotel" or row.structure == "RV" or row.rental == "room" or row.active == "no"):
-			QAable.append(index)
+		if not(type(row.url) != str or type(row.address) != str or row.structure == "resort" or row.structure == "timeshare" or row.structure == "hotel" or row.structure == "RV" or row.rental == "room" or row.active == "no"):
+			QAable.append((index, '=HYPERLINK(' + row.url + ')', row.address, str(row.apn).replace('-',''), row.residential, row.structure, row.rental, row.comments))
 	return QAable
-"""
-def generateWeeklyQA(QAable):
-	batch_size = 5#int(input("Batch size: "))
 
-	QAable_local = QAable.copy()
-	index_table  = []
-	weekly_QA	= []
-
-	while not len(QAable_local) == 0:
-		samples = []
-		if len(QAable_local) >= batch_size:
-			samples = sample(QAable_local, (batch_size))
-		elif len(QAable_local) < batch_size:
-			samples = [elem for elem in QAable_local]
-		weekly_QA.append(samples)
-		for index in samples:
-			QAable_local.remove(index)
-	return weekly_QA
-
-def generateDateMap(weekly_QA):
-	date_map = []
-
-	initial_date = "18-02-2020"#input("Initial date: ")
-
-	for QA in weekly_QA:
-		date_map.append(listToTuplaWithElement(QA, initial_date))
-		initial_date = sameDayOfnextWeek(initial_date)
-	return date_map
-"""
 def reduceTuples(date_map):
+	""" reducedTuples( list tuples ) : list """
 	results = []
 	for week in date_map:
 		for listing in week:
@@ -135,19 +94,5 @@ def reduceTuples(date_map):
 	return results
 
 def sortTuples(reduced, index):
+	""" sortTuples( list reduced, int index ) : list """
 	return sorted(reduced, key=lambda x: x[index])
-
-def dateFormat(date):
-	date = datetime.datetime.strptime(date, "%d-%m-%Y").strftime("%m-%d-%Y")
-	return date.replace('-','/',2)
-
-def generateOutputFormat(sort, QAable, originalSize):
-	dates = []
-	unsorted_list = [elem[0] for elem in sort]
-	for originalIndex in range(originalSize):
-		if originalIndex in QAable:
-			dates.append(dateFormat(sort[unsorted_list.index(originalIndex)][1]))
-		else:
-			dates.append("")
-	return dates
-
